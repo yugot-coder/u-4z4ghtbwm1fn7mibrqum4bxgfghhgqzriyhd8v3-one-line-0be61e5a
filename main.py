@@ -9,12 +9,36 @@ file it wrote and asserts the gate: UTF-8 text of 1 to 140 characters, not
 only white space, exactly one line, no trailing newline.
 """
 
+import hashlib
 import os
 
 LINE = (
     "I asked AI to write my apology; it apologised so well "
     "my girlfriend forgave the AI, not me."
 )
+
+
+def verify_written_bytes(written: bytes, intended: bytes) -> None:
+    """Byte-exact read-back verification against the gate in RULES.txt.
+
+    Raises SystemExit (not assert, so the check survives python -O) if
+    the bytes on disk differ in length, content or sha256 digest, or
+    if the decoded text breaks the gate: UTF-8 text of 1 to 140
+    characters, not only white space, exactly one line.
+    """
+    if len(written) != len(intended):
+        raise SystemExit("read-back byte length mismatch")
+    if written != intended:
+        raise SystemExit("read-back differs from the selected line")
+    if hashlib.sha256(written).hexdigest() != hashlib.sha256(intended).hexdigest():
+        raise SystemExit("read-back digest mismatch")
+    text = written.decode("utf-8")
+    if not 1 <= len(text) <= 140:
+        raise SystemExit(f"length {len(text)} outside 1-140 characters")
+    if not text.strip():
+        raise SystemExit("entry must not be only white space")
+    if "\n" in text or "\r" in text:
+        raise SystemExit("entry must be a single line")
 
 
 def main() -> None:
@@ -27,12 +51,9 @@ def main() -> None:
         f.write(LINE)
 
     # Read-back validation against the gate in RULES.txt.
-    with open(path, "r", encoding="utf-8", newline="") as f:
-        text = f.read()
-    assert text == LINE, "read-back differs from the selected line"
-    assert 1 <= len(text) <= 140, f"length {len(text)} outside 1-140 characters"
-    assert text.strip(), "entry must not be only white space"
-    assert "\n" not in text and "\r" not in text, "entry must be a single line"
+    with open(path, "rb") as f:
+        written = f.read()
+    verify_written_bytes(written, LINE.encode("utf-8"))
 
 
 if __name__ == "__main__":
